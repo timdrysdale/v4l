@@ -33,6 +33,7 @@ import (
 
 	"github.com/timdrysdale/v4l"
 	"github.com/timdrysdale/v4l/fmt/yuyv"
+	"github.com/timdrysdale/v4l/fmt/h264"
 )
 
 func main() {
@@ -332,7 +333,7 @@ func (w *DevicePickerWindow) fillConfigList(info v4l.DeviceInfo) error {
 		return errors.New("ListConfigs: " + err.Error())
 	}
 	for i := range cfgs {
-		if cfgs[i].Format != yuyv.FourCC {
+		if cfgs[i].Format != h264.FourCC {
 			continue
 		}
 		w.configList.Add(labelNew(cfg2str(cfgs[i])))

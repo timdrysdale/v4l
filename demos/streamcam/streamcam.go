@@ -51,8 +51,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/korandiz/v4l"
-	"github.com/korandiz/v4l/fmt/mjpeg"
+	"github.com/timdrysdale/v4l"
+	"github.com/timdrysdale/v4l/fmt/mjpeg"
 )
 
 func main() {

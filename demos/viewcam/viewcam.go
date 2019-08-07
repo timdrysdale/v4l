@@ -31,8 +31,8 @@ import (
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 
-	"github.com/korandiz/v4l"
-	"github.com/korandiz/v4l/fmt/yuyv"
+	"github.com/timdrysdale/v4l"
+	"github.com/timdrysdale/v4l/fmt/yuyv"
 )
 
 func main() {

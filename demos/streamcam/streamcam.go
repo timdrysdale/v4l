@@ -39,21 +39,204 @@
 package main
 
 import (
-	"bytes"
+
+	"encoding/json" 
 	"flag"
 	"fmt"
-	"image"
-	"image/jpeg"
+	"html/template"
+
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
-	"time"
+	"runtime"
 
 	"github.com/timdrysdale/v4l"
 	"github.com/timdrysdale/v4l/fmt/h264"
+
+	"github.com/gorilla/websocket" 
+
+
+
 )
+
+ 
+var upgrader = websocket.Upgrader{
+    ReadBufferSize:  1500000,
+    WriteBufferSize: 1500000,
+}
+
+type Connection struct {  
+    ws *websocket.Conn   
+    send chan []byte 
+    hub *Hub
+    run bool
+    key string  
+    fileMP4DataName string      
+    file264DataName string  
+    file264SizeName string 
+}
+
+var fo *os.File
+var gConn *Connection
+var gHub *Hub 
+
+func indexHandler(w http.ResponseWriter, r *http.Request) { 
+    t, err := template.ParseFiles("./index.html")
+    if err != nil {
+        http.Error(w, err.Error(),
+            http.StatusInternalServerError) 
+        return
+    }
+    t.Execute(w,  "ws://"+r.Host+"/play")
+}
+
+func dist(w http.ResponseWriter, r *http.Request) { 
+    http.ServeFile(w, r, "./"+r.URL.Path[1:])
+}
+
+func parseAVCNALu(array []byte) int { 
+  arrayLen := len(array)
+  i := 0
+  state := 0
+  count := 0
+  for i < arrayLen {
+    value := array[i];
+    i += 1
+    // finding 3 or 4-byte start codes (00 00 01 OR 00 00 00 01)
+    switch state {
+      case 0:
+        if value == 0 {
+          state = 1              
+        }   
+      case 1:
+        if value == 0 {
+          state = 2            
+        } else {
+          state = 0
+        }        
+      case 2,3:        
+        if value == 0 {
+          state = 3           
+        } else if value == 1 && i < arrayLen {
+          unitType := array[i] & 0x1f         
+          if unitType == 7 || unitType == 8{
+              count += 1
+          } 
+            state = 0
+          } else {
+            state = 0
+          }    
+      }       
+    } 
+  return count
+}
+func stream(cam *v4l.Device) {
+
+	
+	for {
+		buf, err := cam.Capture()
+		if err != nil {
+			log.Println("Capture:", err)
+			proc, _ := os.FindProcess(os.Getpid())
+			proc.Signal(os.Interrupt)
+			break
+		}
+
+		
+		b := make([]byte, buf.Size())
+		buf.ReadAt(b, 0)
+		
+
+		
+	}
+}
+
+func (conn *Connection) app264Streaming(cam *v4l.Device) {
+	// f, err := os.Create("./stream.h264")
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
+	
+	for {
+		buf, err := cam.Capture()
+		if err != nil {
+			log.Println("Capture:", err)
+			proc, _ := os.FindProcess(os.Getpid())
+			proc.Signal(os.Interrupt)
+			break
+		}
+
+		
+		b := make([]byte, buf.Size())
+		buf.ReadAt(b, 0)
+		
+		//_, err = f.Write(b[0:buf.BytesUsed()])
+		//if err != nil {
+		//	fmt.Println(err)
+		//	f.Close()
+		//	return
+		//}
+		err = conn.ws.WriteMessage(2,  b[0:buf.BytesUsed()])
+		if err != nil {
+			fmt.Printf("conn.WriteMessage ERROR!!!\n")
+			break
+		}
+		fmt.Println(buf.BytesUsed())	
+		// _, err = f.Write(b[0:buf.BytesUsed()])
+		// if err != nil {
+		// 	fmt.Println(err)
+		// 	f.Close()
+		// 	return
+		// }
+		runtime.Gosched()
+	}
+}	
+    
+
+
+func (conn *Connection) appReadCommand2(cam *v4l.Device) {
+        
+	for {
+        _, message, err := conn.ws.ReadMessage()
+        if err != nil {    
+            break
+	}        
+        u := map[string]interface{}{}   
+        json.Unmarshal(message, &u)   
+		if u["t"].(string) == "open"{
+			fmt.Println("starting streaming")
+            go conn.app264Streaming(cam)
+        }
+   
+    }
+    conn.ws.Close()
+}
+
+
+func play2(w http.ResponseWriter, r *http.Request, cam *v4l.Device) { 
+ 
+    ws, err := upgrader.Upgrade(w, r, nil)
+    if err != nil {
+        log.Print("upgrade:", err)
+        return
+    }
+    defer ws.Close()
+
+    c := &Connection{hub: gHub, send: make(chan []byte, 256), ws: ws, run: true } 
+    
+    c.hub.register <- c
+    
+    c.key = c.hub.setHubConnName( c )
+	fmt.Println("in play2") 
+    go c.appReadCommand2(cam)
+
+    for c.run { runtime.Gosched() }
+
+    fmt.Fprintf(w, "ok")
+ }
+
 
 func main() {
 	var (
@@ -61,7 +244,7 @@ func main() {
 		w = flag.Int("w", 0, "image width")
 		h = flag.Int("h", 0, "image height")
 		f = flag.Int("f", 0, "frame rate")
-		a = flag.String("a", ":8080", "address to listen on")
+		//a = flag.String("a", ":8080", "address to listen on")
 		l = flag.Bool("l", false, "print supported device configs and quit")
 		r = flag.Bool("r", false, "reset all controls to default")
 	)
@@ -133,21 +316,27 @@ func main() {
 		}
 	}
 
-	blankImg := image.NewRGBA(image.Rect(0, 0, cfg.Width, cfg.Height))
-	buf := new(bytes.Buffer)
-	jpeg.Encode(buf, blankImg, nil)
-	blank = buf.Bytes()
 
 	go handleInterrupt()
-	go stream(cam)
+	//go stream(cam)
 
-	log.Println("Listening on address", *a)
-	srv := http.Server{
-		Addr:    *a,
-		Handler: http.HandlerFunc(serveHTTP),
-	}
-	err = srv.ListenAndServe()
-	fatal("ListenAndServe", err)
+
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	
+	gHub = newHub()
+	go gHub.run()
+	
+
+	http.HandleFunc("/dist/", dist) 
+	http.HandleFunc("/", indexHandler)  
+
+	http.HandleFunc("/play2", func(w http.ResponseWriter, r *http.Request) {
+		play2(w, r, cam)
+	})
+	
+	fmt.Printf("wfs server lite is running....\n")
+        
+	http.ListenAndServe("0.0.0.0:8888", nil)
 }
 
 func cfg2str(cfg v4l.DeviceConfig) string {
@@ -155,178 +344,17 @@ func cfg2str(cfg v4l.DeviceConfig) string {
 		float64(cfg.FPS.N)/float64(cfg.FPS.D))
 }
 
-var (
-	mu      sync.Mutex
-	clients []*client
-	stopped bool
-	quit    = make(chan int, 1)
-	blank   []byte
-)
-
-type client struct {
-	i  int
-	ch chan []byte
-}
-
-func newClient() *client {
-	mu.Lock()
-	defer mu.Unlock()
-	if stopped {
-		return nil
-	}
-	clt := &client{
-		i:  len(clients),
-		ch: make(chan []byte, 1),
-	}
-	clt.ch <- blank
-	clients = append(clients, clt)
-	return clt
-}
-
-func (clt *client) remove() {
-	mu.Lock()
-	defer mu.Unlock()
-	i := clt.i
-	last := len(clients) - 1
-	clients[i] = clients[last]
-	clients[i].i = i
-	clients[last] = nil
-	clients = clients[:last]
-	clt.i = -1
-	if stopped && len(clients) == 0 {
-		quit <- 1
-	}
-}
 
 func handleInterrupt() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, os.Interrupt)
 	<-ch
 	log.Println("Stopping...")
-	mu.Lock()
-	stopped = true
-	if len(clients) == 0 {
-		quit <- 1
-	} else {
-		for _, clt := range clients {
-			close(clt.ch)
-		}
-	}
-	mu.Unlock()
-	<-quit
+	//TODO close websocket here 
 	os.Exit(0)
 }
 
-func stream(cam *v4l.Device) {
-	f, err := os.Create("./stream.h264")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	
-	for {
-		buf, err := cam.Capture()
-		if err != nil {
-			log.Println("Capture:", err)
-			proc, _ := os.FindProcess(os.Getpid())
-			proc.Signal(os.Interrupt)
-			break
-		}
 
-		
-		b := make([]byte, buf.Size())
-		buf.ReadAt(b, 0)
-		
-		_, err = f.Write(b[0:buf.BytesUsed()])
-		if err != nil {
-			fmt.Println(err)
-			f.Close()
-			return
-		}
-		
-		mu.Lock()
-		if stopped {
-			mu.Unlock()
-			break
-		}
-		for _, clt := range clients {
-			select {
-			case clt.ch <- b:
-			case <-clt.ch:
-				clt.ch <- b
-			}
-		}
-		mu.Unlock()
-	}
-}
-
-func serveHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[%s] New connection\n", r.RemoteAddr)
-	hj, ok := w.(http.Hijacker)
-	if !ok {
-		log.Printf("[%s] ResponseWrite is not a Hijacker", r.RemoteAddr)
-		http.Error(w, "Internal Server Error", 500)
-		return
-	}
-	conn, _, err := hj.Hijack()
-	if err != nil {
-		log.Printf("[%s] Hijack: %v\n", r.RemoteAddr, err)
-		http.Error(w, "Internal Server Error", 500)
-		return
-	}
-	defer conn.Close()
-
-	clt := newClient()
-	if clt == nil {
-		return
-	}
-	defer clt.remove()
-
-	const B = "45c7pIy0cxa4vWtwGuVuAkbzKAQGpRjz9eyhyHTv"
-
-	_, err = conn.Write([]byte("HTTP/1.1 200 OK\r\n" +
-		"Date: " + time.Now().UTC().Format(http.TimeFormat) + "\r\n" +
-		"Content-Type: multipart/x-mixed-replace; boundary=" + B + "\r\n" +
-		"Cache-Control: no-cache, no-store, max-age=0, must-revalidate\r\n" +
-		"Pragma: no-cache\r\n" +
-		"\r\n" +
-		"--" + B + "\r\n"))
-	if err != nil {
-		log.Printf("[%s] %v\n", r.RemoteAddr, err)
-		return
-	}
-
-	for {
-		buf := <-clt.ch
-		conn.SetDeadline(time.Now().Add(time.Second))
-		_, err := conn.Write([]byte("Content-Type: video/h264\r\n\r\n"))
-		if err != nil {
-			log.Printf("[%s] %v\n", r.RemoteAddr, err)
-			return
-		}
-		if buf == nil {
-			_, err := conn.Write(blank)
-			if err == nil {
-				conn.Write([]byte("--" + B + "--\r\n"))
-			} else {
-				log.Printf("[%s] %v\n", r.RemoteAddr, err)
-			}
-			log.Printf("[%s] Quitting\n", r.RemoteAddr)
-			return
-		}
-		_, err = conn.Write(buf)
-		if err != nil {
-			log.Printf("[%s] %v\n", r.RemoteAddr, err)
-			return
-		}
-
-		_, err = conn.Write([]byte("--" + B + "\r\n"))
-		if err != nil {
-			log.Printf("[%s] %v\n", r.RemoteAddr, err)
-			return
-		}
-	}
-}
 
 func fatal(p string, err error) {
 	if err != nil {

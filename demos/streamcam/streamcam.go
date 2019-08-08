@@ -237,7 +237,7 @@ func stream(cam *v4l.Device) {
 		b := make([]byte, buf.Size())
 		buf.ReadAt(b, 0)
 		
-		_, err = f.Write(b)
+		_, err = f.Write(b[0:buf.BytesUsed()])
 		if err != nil {
 			fmt.Println(err)
 			f.Close()

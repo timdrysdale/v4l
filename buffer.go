@@ -29,6 +29,7 @@ type Buffer struct {
 	n   uint64
 	pos int
 	seq uint32
+	used uint32
 }
 
 // Size returns the total number of bytes in the buffer. As long as the data is
@@ -41,12 +42,12 @@ func (b *Buffer) Size() int64 {
 // BytesUsed returns the total number of bytes in the buffer. As long as the data is
 // available, the return value is constant and unaffected by calls to the
 // methods of Buffer. If the data is no longer available, it returns 0.
-//func (b *Buffer) BytesUsed() int64 {
-//	if b.d.nCaptures != b.n || b.d.bufIndex == noBuffer {
-//	return 0
-//	}
-//	return int64(b.d.buffers[b.d.bufIndex].bytesused)
-//}
+func (b *Buffer) BytesUsed() int64 {
+	if b.d.nCaptures != b.n || b.d.bufIndex == noBuffer {
+	return 0
+	}
+	return int64(b.used)
+}
 
 
 // Len returns the number of unread bytes in the buffer. If the data is no

@@ -20,7 +20,6 @@
 package v4l
 
 import (
-	"fmt"
 	"syscall"
 
 )
@@ -384,6 +383,7 @@ func (d *Device) Capture() (*Buffer, error) {
 	d.nCaptures++
 
 	// Enqueue the old buffer (if any).
+	// is there a memory leak here or is it garbage collected ok?
 	if d.bufIndex != noBuffer {
 		b := v4l_buffer{
 			typ:    v4l_bufTypeVideoCapture,
@@ -406,11 +406,9 @@ func (d *Device) Capture() (*Buffer, error) {
 	}
 	d.buffers[b.index] = d.buffers[b.index][:b.length]
 
-	fmt.Println("buf bytesused =", b.bytesused)
-	
 	d.bufIndex = b.index
 
-	return &Buffer{d.device, d.nCaptures, 0, b.sequence}, nil
+	return &Buffer{d.device, d.nCaptures, 0, b.sequence, b.bytesused}, nil
 }
 
 // GetConfig returns the current configuration of the device.

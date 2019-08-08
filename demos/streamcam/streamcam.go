@@ -243,9 +243,6 @@ func stream(cam *v4l.Device) {
 			f.Close()
 			return
 		}
-		//fmt.Println(n, "bytes written successfully")
-		fmt.Println(b[0 : buf.Size()])
-		fmt.Println("---------------------------------------------------------------------------------------------------------------")
 		
 		mu.Lock()
 		if stopped {

@@ -38,6 +38,17 @@ func (b *Buffer) Size() int64 {
 	return int64(len(b.source()))
 }
 
+// BytesUsed returns the total number of bytes in the buffer. As long as the data is
+// available, the return value is constant and unaffected by calls to the
+// methods of Buffer. If the data is no longer available, it returns 0.
+//func (b *Buffer) BytesUsed() int64 {
+//	if b.d.nCaptures != b.n || b.d.bufIndex == noBuffer {
+//	return 0
+//	}
+//	return int64(b.d.buffers[b.d.bufIndex].bytesused)
+//}
+
+
 // Len returns the number of unread bytes in the buffer. If the data is no
 // longer available, it returns 0.
 func (b *Buffer) Len() int {

@@ -52,7 +52,7 @@ import (
 	"time"
 
 	"github.com/timdrysdale/v4l"
-	"github.com/timdrysdale/v4l/fmt/mjpeg"
+	"github.com/timdrysdale/v4l/fmt/h264"
 )
 
 func main() {
@@ -88,7 +88,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Supported device configs:")
 		found := false
 		for _, cfg := range configs {
-			if cfg.Format != mjpeg.FourCC {
+			if cfg.Format != h264.FourCC {
 				continue
 			}
 			found = true
@@ -102,7 +102,7 @@ func main() {
 
 	cfg, err := cam.GetConfig()
 	fatal("GetConfig", err)
-	cfg.Format = mjpeg.FourCC
+	cfg.Format = h264.FourCC
 	if *w > 0 {
 		cfg.Width = *w
 	}
@@ -119,8 +119,8 @@ func main() {
 	fatal("TurnOn", err)
 	cfg, err = cam.GetConfig()
 	fatal("GetConfig", err)
-	if cfg.Format != mjpeg.FourCC {
-		fmt.Fprintln(os.Stderr, "Failed to set MJPEG format.")
+	if cfg.Format != h264.FourCC {
+		fmt.Fprintln(os.Stderr, "Failed to set H264 format.")
 		os.Exit(1)
 	}
 	fmt.Fprintln(os.Stderr, "Actual device config:", cfg2str(cfg))
@@ -218,6 +218,12 @@ func handleInterrupt() {
 }
 
 func stream(cam *v4l.Device) {
+	f, err := os.Create("./stream.h264")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	
 	for {
 		buf, err := cam.Capture()
 		if err != nil {
@@ -226,8 +232,21 @@ func stream(cam *v4l.Device) {
 			proc.Signal(os.Interrupt)
 			break
 		}
+
+		
 		b := make([]byte, buf.Size())
 		buf.ReadAt(b, 0)
+		
+		_, err = f.Write(b)
+		if err != nil {
+			fmt.Println(err)
+			f.Close()
+			return
+		}
+		//fmt.Println(n, "bytes written successfully")
+		fmt.Println(b[0 : buf.Size()])
+		fmt.Println("---------------------------------------------------------------------------------------------------------------")
+		
 		mu.Lock()
 		if stopped {
 			mu.Unlock()
@@ -283,7 +302,7 @@ func serveHTTP(w http.ResponseWriter, r *http.Request) {
 	for {
 		buf := <-clt.ch
 		conn.SetDeadline(time.Now().Add(time.Second))
-		_, err := conn.Write([]byte("Content-Type: image/jpeg\r\n\r\n"))
+		_, err := conn.Write([]byte("Content-Type: video/h264\r\n\r\n"))
 		if err != nil {
 			log.Printf("[%s] %v\n", r.RemoteAddr, err)
 			return
@@ -303,6 +322,7 @@ func serveHTTP(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[%s] %v\n", r.RemoteAddr, err)
 			return
 		}
+
 		_, err = conn.Write([]byte("--" + B + "\r\n"))
 		if err != nil {
 			log.Printf("[%s] %v\n", r.RemoteAddr, err)

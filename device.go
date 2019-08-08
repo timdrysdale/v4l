@@ -19,7 +19,11 @@
 // Package v4l is a facade to the Video4Linux video capture interface.
 package v4l
 
-import "syscall"
+import (
+	"fmt"
+	"syscall"
+
+)
 
 // Control IDs. Devices may have other controls than these, including custom
 // (driver specific) ones.
@@ -401,6 +405,9 @@ func (d *Device) Capture() (*Buffer, error) {
 		return nil, err
 	}
 	d.buffers[b.index] = d.buffers[b.index][:b.length]
+
+	fmt.Println("buf bytesused =", b.bytesused)
+	
 	d.bufIndex = b.index
 
 	return &Buffer{d.device, d.nCaptures, 0, b.sequence}, nil

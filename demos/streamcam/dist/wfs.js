@@ -450,7 +450,8 @@ var BufferController = function (_EventHandler) {
     key: 'onBufferReset',
     value: function onBufferReset(data) {
       if (this.mediaType === 'H264Raw') {
-        this.createSourceBuffers({ tracks: 'video', mimeType: data.mimeType });
+          this.createSourceBuffers({ tracks: 'video', mimeType: data.mimeType });
+	  console.log("Found H264RAW")
       }
     }
   }, {
@@ -460,9 +461,11 @@ var BufferController = function (_EventHandler) {
           mediaSource = this.mediaSource;
       var mimeType = void 0;
       if (tracks.mimeType === '') {
-        mimeType = 'video/mp4;codecs=avc1.420028'; // avc1.42c01f avc1.42801e avc1.640028 avc1.420028
+          mimeType = 'video/mp4;codecs=avc1.420028'; // avc1.42c01f avc1.42801e avc1.640028 avc1.420028
+	  console.log("setting codecs to video/mp4;codecs=avc1.420028 because undefined" )
       } else {
-        mimeType = 'video/mp4;codecs=' + tracks.mimeType;
+          mimeType = 'video/mp4;codecs=' + tracks.mimeType;
+	  console.log("setting codecs as listed in track to",  tracks.mimeType)
       }
 
       try {

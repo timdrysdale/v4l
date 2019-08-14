@@ -293,7 +293,7 @@ func (d *Device) TurnOn() error {
 	}
 
 	// Allocate buffers.
-	if err := d.allocBuffers(4); err != nil {
+	if err := d.allocBuffers(100); err != nil {
 		return err
 	}
 

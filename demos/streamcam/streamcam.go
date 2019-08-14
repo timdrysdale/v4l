@@ -50,6 +50,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	//"time"
 
 	"github.com/timdrysdale/v4l"
 	"github.com/timdrysdale/v4l/fmt/h264"
@@ -153,11 +154,11 @@ func stream(cam *v4l.Device) {
 }
 
 func (conn *Connection) app264Streaming(cam *v4l.Device) {
-	// f, err := os.Create("./stream.h264")
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
+	 f, err := os.Create("./stream.h264")
+	 if err != nil {
+	 	fmt.Println(err)
+	 	return
+	}
 	
 	for {
 		buf, err := cam.Capture()
@@ -171,26 +172,23 @@ func (conn *Connection) app264Streaming(cam *v4l.Device) {
 		
 		b := make([]byte, buf.Size())
 		buf.ReadAt(b, 0)
-		
-		//_, err = f.Write(b[0:buf.BytesUsed()])
-		//if err != nil {
-		//	fmt.Println(err)
-		//	f.Close()
-		//	return
-		//}
-		err = conn.ws.WriteMessage(2,  b[0:buf.BytesUsed()])
+		fmt.Println(buf.BytesUsed())		
+		_, err = f.Write(b[0:buf.BytesUsed()])
 		if err != nil {
-			fmt.Printf("conn.WriteMessage ERROR!!!\n")
-			break
+			fmt.Println(err)
+			f.Close()
+			return
 		}
-		fmt.Println(buf.BytesUsed())	
-		// _, err = f.Write(b[0:buf.BytesUsed()])
-		// if err != nil {
-		// 	fmt.Println(err)
-		// 	f.Close()
-		// 	return
-		// }
-		runtime.Gosched()
+		//time.Sleep(1 * time.Second)
+
+		//err = conn.ws.WriteMessage(2,  b[0:buf.BytesUsed()])
+		//if err != nil {
+		//	fmt.Printf("conn.WriteMessage ERROR!!!\n")
+		//	break
+		//}
+		//fmt.Println(buf.BytesUsed())	
+		 
+		//runtime.Gosched()
 	}
 }	
     
